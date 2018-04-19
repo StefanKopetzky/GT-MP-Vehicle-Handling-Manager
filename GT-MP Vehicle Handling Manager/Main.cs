@@ -16,6 +16,8 @@ namespace GT_MP_Vehicle_Handling_Manager
         public List<Handling> Handlings = new List<Handling>();
         private bool _overwriteAllowed = false;
         private bool _setPlayerHandlingOnConnect = false;
+        private int _packetSize = 10;
+        private bool _displayDebugMessages = false;
 
         public Main()
         {
@@ -31,7 +33,7 @@ namespace GT_MP_Vehicle_Handling_Manager
         {
             if (_setPlayerHandlingOnConnect)
             {
-                SetAllHandlings(player);
+                SetAllHandlings(player, _packetSize);
             }
         }
 
@@ -50,6 +52,14 @@ namespace GT_MP_Vehicle_Handling_Manager
             {
                 _setPlayerHandlingOnConnect = API.getSetting<bool>("sethandlingonconncect");
             }
+            if (API.hasSetting("handlingpacketsize"))
+            {
+                _packetSize = API.getSetting<int>("handlingpacketsize");
+            }
+            if (API.hasSetting("showdebugmessages"))
+            {
+                _displayDebugMessages = API.getSetting<bool>("showdebugmessages");
+            }
         }
 
         private void API_onClientEventTrigger(Client player, string eventName, params object[] arguments)
@@ -62,7 +72,8 @@ namespace GT_MP_Vehicle_Handling_Manager
                     var response = JsonConvert.DeserializeObject<List<Handling>>((string)arguments[0]);
                     if (response != null)
                         Handlings = response;
-                    API.consoleOutput(LogCat.Debug, "Fetched " + Handlings.Count + " handlings");
+                    if(_displayDebugMessages)
+                        API.consoleOutput(LogCat.Debug, "Fetched " + Handlings.Count + " handlings");
                     _overwriteAllowed = false;
                     SaveToFile();
                     return;
@@ -82,7 +93,7 @@ namespace GT_MP_Vehicle_Handling_Manager
         [Command("applyhandlingdata")]
         public void ApplyHandlingDataCmd(Client player)
         {
-            SetAllHandlings(player);
+            SetAllHandlings(player, _packetSize);
         }
 
         [Command("applyhandlingdatatoall")]
@@ -90,7 +101,7 @@ namespace GT_MP_Vehicle_Handling_Manager
         {
             API.getAllPlayers().ForEach(plr =>
             {
-                SetAllHandlings(plr);
+                SetAllHandlings(plr, _packetSize);
             });
         }
 
@@ -110,9 +121,49 @@ namespace GT_MP_Vehicle_Handling_Manager
             player.triggerEvent("gethandlingofvehiclelist", JsonConvert.SerializeObject(vehiclehashes));
         }
 
-        public void SetAllHandlings(Client player)
+        public void SetAllHandlings(Client player, int vehiclePacket)
         {
-            player.triggerEvent("sethandlingofvehiclelist", JsonConvert.SerializeObject(Handlings));
+            List<List<Handling>> handlingslist = new List<List<Handling>>();
+            handlingslist.Add(new List<Handling>());
+            int count = 0;
+            if(_displayDebugMessages)
+                API.consoleOutput(LogCat.Debug, "Total Handlings " + Handlings.Count);
+            foreach (Handling handling in Handlings)
+            {
+                if(count < vehiclePacket) 
+                {
+                    handlingslist[handlingslist.Count - 1].Add(handling);
+                }
+                else
+                {
+                    count = 0;
+                    handlingslist.Add(new List<Handling> { handling });
+                }
+                count++;
+            }
+            if(_displayDebugMessages)
+                API.consoleOutput(LogCat.Debug, "Splitted into " + handlingslist.Count + " lists");
+            var listcount = 0;
+            foreach(List<Handling> handlinglist in handlingslist)
+            {
+                if(listcount == 0)
+                {
+                    player.triggerEvent("sethandlingofvehiclelist", JsonConvert.SerializeObject(handlinglist));
+                    if(_displayDebugMessages)
+                        API.consoleOutput(LogCat.Debug, "Handling Pack 0 with " + handlinglist.Count + " handlings");
+                    listcount += 100;
+                }
+                else
+                {
+                    API.delay(listcount, true, () =>
+                    {
+                        player.triggerEvent("sethandlingofvehiclelist", JsonConvert.SerializeObject(handlinglist));
+                        if(_displayDebugMessages)
+                            API.consoleOutput(LogCat.Debug, "Handling Pack with " + handlinglist.Count + " handlings");
+                    });
+                    listcount += 100;
+                }
+            }
         }
 
         #endregion General Functions

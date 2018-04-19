@@ -8,6 +8,8 @@
 
   <settings>
     <setting name="sethandlingonconncect" value="true" />
+    <setting name="handlingpacketsize" value="10" />
+    <setting name="showdebugmessages" value="false" />
   </settings>
   
   <assembly ref="System.Data.dll" />
